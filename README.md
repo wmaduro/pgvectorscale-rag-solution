@@ -1,4 +1,4 @@
-# Quickstart: Automated Vector Embeddings with PostgreSQL
+# Automated Vector Embeddings with PostgreSQL
 
 This guide demonstrates how to use Timescale's new vectorizer feature to automatically generate and maintain vector embeddings in PostgreSQL. Instead of managing embeddings in your application code, you can now handle them directly in your database using a SQL-level interface.
 
