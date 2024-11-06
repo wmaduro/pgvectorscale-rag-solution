@@ -1,17 +1,29 @@
-name: timescaledb
-
+name: pgai
 services:
-  timescaledb:
+  db:
     image: timescale/timescaledb-ha:pg16
-    container_name: timescaledb
     environment:
-      - POSTGRES_DB=postgres
-      - POSTGRES_PASSWORD=password
+      POSTGRES_PASSWORD: password
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
     ports:
       - "5432:5432"
     volumes:
-      - timescaledb_data:/var/lib/postgresql/data
-    restart: unless-stopped
+      - pgai_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  vectorizer-worker:
+    image: timescale/pgai-vectorizer-worker:0.1.0
+    environment:
+      PGAI_VECTORIZER_WORKER_DB_URL: postgres://postgres:password@db:5432/postgres
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
-  timescaledb_data:
+  pgai_data:

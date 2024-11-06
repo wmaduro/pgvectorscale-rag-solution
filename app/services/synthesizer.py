@@ -48,9 +48,7 @@ class Synthesizer:
         Returns:
             A SynthesizedResponse containing thought process, answer, and context sufficiency.
         """
-        context_str = Synthesizer.dataframe_to_json(
-            context, columns_to_keep=["content"]
-        )
+        context_str = Synthesizer.dataframe_to_json(context, columns_to_keep=["chunk"])
 
         messages = [
             {"role": "system", "content": Synthesizer.SYSTEM_PROMPT},

@@ -1,42 +1,35 @@
-from database.vector_store import VectorStore
+import pandas as pd
+from config.settings import get_settings
 from services.synthesizer import Synthesizer
+import psycopg2
 
-# Initialize VectorStore
-vec = VectorStore()
-
-query = "Is there any news related to London?"
-
-# --------------------------------------------------------------
-# Semantic search
-# --------------------------------------------------------------
-
-semantic_results = vec.semantic_search(query=query, limit=5)
-
-# --------------------------------------------------------------
-# Simple keyword search
-# --------------------------------------------------------------
-
-keyword_results = vec.keyword_search(query=query, limit=5)
+settings = get_settings()
 
 
-# --------------------------------------------------------------
-# Hybrid search
-# --------------------------------------------------------------
+def semantic_search(query_text: str, limit: int = 15) -> list[tuple]:
+    with psycopg2.connect(settings.database.service_url) as conn:
+        with conn.cursor() as cursor:
+            search_query = """
+                SELECT embedding_uuid, chunk
+                FROM news_embedding_oai_small
+                ORDER BY embedding <=> (
+                    SELECT ai.openai_embed('text-embedding-3-small', %s)
+                )
+                LIMIT %s;
+            """
+            try:
+                cursor.execute(search_query, (query_text, limit))
+                result = cursor.fetchall()
+                return pd.DataFrame(result, columns=["id", "chunk"])
+            except psycopg2.Error as e:
+                raise RuntimeError(
+                    f"Failed to execute similarity search: {str(e)}"
+                ) from e
 
-hybrid_results = vec.hybrid_search(query=query, keyword_k=10, semantic_k=10)
+
+question = "Is there any news about London?"
+result = semantic_search(question)
 
 
-# --------------------------------------------------------------
-# Reranking
-# --------------------------------------------------------------
-
-reranked_results = vec.hybrid_search(
-    query=query, keyword_k=10, semantic_k=10, rerank=True, top_n=5
-)
-
-# --------------------------------------------------------------
-# Synthesize
-# --------------------------------------------------------------
-
-response = Synthesizer.generate_response(question=query, context=reranked_results)
-print(response.answer)
+answer = Synthesizer.generate_response(question, result)
+print(answer.answer)

@@ -1,40 +1,100 @@
-# Building Advanced Hybrid RAG Pipelines with PostgreSQL
+# Quickstart: Automated Vector Embeddings with PostgreSQL
 
-In this guide, we'll build an advanced Retrieval-Augmented Generation (RAG) pipeline using PostgreSQL with **hybrid search** and **reranking** capabilities. We'll implement a powerful system that leverages both keyword-based and semantic vector search, enhanced with Cohere's reranking endpoint, to provide highly relevant and accurate results. By the end of this tutorial, you'll have a flexible and efficient search solution capable of handling complex queries across diverse document types, setting the foundation for more sophisticated AI applications.
+This guide demonstrates how to use Timescale's new vectorizer feature to automatically generate and maintain vector embeddings in PostgreSQL. Instead of managing embeddings in your application code, you can now handle them directly in your database using a SQL-level interface.
 
+## Further documenation
+
+- [Vector Databases Are the Wrong Abstraction](https://www.timescale.com/blog/vector-databases-are-the-wrong-abstraction/)
+- [Vectorizer Quick Start](https://github.com/timescale/pgai/blob/main/docs/vectorizer-quick-start.md)
+- [Automate AI embedding with pgai Vectorizer](https://github.com/timescale/pgai/blob/main/docs/vectorizer.md)
+- [Vectorizer Worker](https://github.com/timescale/pgai/blob/main/docs/vectorizer-worker.md)
+  
 ## Prerequisites
 
-This tutorial builds upon my [previous guide](https://github.com/daveebbelaar/pgvectorscale-rag-solution/tree/setup) on setting up Pgvectorscale to build a high-performance RAG system. Before diving into this, make sure you’ve completed that setup, as it lays the foundation for the steps we’ll take here. In this repository, each branch contains a different, but related tutorial, so feel free to explore them as you progress.
-
-- Docker
-- Python 3.7+
+- Docker Desktop
+- PostgreSQL GUI client (e.g., TablePlus, pgAdmin)
 - OpenAI API key
-- PostgreSQL GUI client
-- Cohere API key (optional, for reranking)
+- Python 3.7+
 
-## Steps
+## Setup
 
-1. Set up Docker environment
-2. Connect to the database using a PostgreSQL GUI client (I use TablePlus)
-3. Create a new virtual Python environment and install the `requirements.txt`
-4. Create a Python script to insert document as vectors using OpenAI embeddings
-5. Create a Python function to perform similarity search
+1. Clone this repository and create your TWO `.env` files:
+   
+```bash
+cp app/example.env app/.env
+cp docker/example.env app/.env
+```
 
-## Getting Started
+1. Add your OpenAI API key to the `.env` file:
+   
+```
+OPENAI_API_KEY=your_key_here
+```
 
-1. Create a copy of `example.env` and rename it to `.env`
-2. Open `.env` and fill in your API keys. Leave the database settings as is
-3. Run the Docker container with `docker compose up -d`
-4. Connect to the database using your favorite PostgreSQL GUI (see settings below).
-5. Create a new Python virutal environemnt for this project
-6. Install the required Python packages using `pip install -r requirements.txt`
-7. Check `app/config/settings.py` so you understand how this app is set up
-8. Execute `insert_vectors.py` to populate the database
-9. Play with `search.py` to perform similarity searches
+1. Start the Docker containers:
+   
+```bash
+docker compose up -d
+```
 
-## Database settings
+This will start two services:
 
-How to connect to the database using a PostgreSQL GUI client:
+- A PostgreSQL database using Timescale's image
+- A vectorizer worker that automatically maintains your embeddings
+
+## Database Setup
+
+The initialization happens automatically through three SQL files in `docker/init-db/`:
+
+1. Extensions setup (`01-init.sql`):
+
+```sql
+CREATE EXTENSION IF NOT EXISTS ai CASCADE;
+CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;
+```
+
+1. Base table creation (`02-init.sql`):
+
+```sql
+CREATE TABLE news (
+    id SERIAL PRIMARY KEY,
+    article TEXT,
+    highlights TEXT,
+    summary TEXT
+);
+```
+
+1. Vectorizer configuration (`03-init.sql`):
+
+```sql
+SELECT ai.create_vectorizer(
+    'public.news'::regclass,
+    destination => 'news_embedding_oai_small',
+    embedding => ai.embedding_openai('text-embedding-3-small', 1536, api_key_name=>'OPENAI_API_KEY'),
+    chunking => ai.chunking_recursive_character_text_splitter('article'),
+    formatting => ai.formatting_python_template('Article summary: $summary article chunk: $chunk')
+);
+```
+
+## Loading Sample Data
+
+1. Install Python dependencies:
+
+```bash
+pip install -r requirements.txt
+```
+
+1. Run the sample data loader:
+
+```bash
+python app/upsert.py
+```
+
+This will load sample articles from the CNN/Daily Mail dataset.
+
+## Checking the Results
+
+Connect to the database using your PostgreSQL GUI client:
 
 - Host: localhost
 - Port: 5432
@@ -42,95 +102,105 @@ How to connect to the database using a PostgreSQL GUI client:
 - Password: password
 - Database: postgres
 
-## Keyword Search
+You should see:
 
-Keyword search in PostgreSQL leverages full-text search capabilities to find relevant documents based on textual queries. Our implementation uses the `to_tsvector` and `websearch_to_tsquery` functions for efficient text searching. More info on this [here](https://www.postgresql.org/docs/current/textsearch.html).
+- `news` table with your raw articles
+- `news_embedding_oai_small` table containing the vector embeddings
+- A view that joins the base table with embeddings
 
-### How it works
-
-The `keyword_search` method in `vector_store.py` performs the following steps:
-
-1. Converts the contents of each document into a tsvector (text search vector) using `to_tsvector('english', contents)`.
-2. Transforms the user's query into a tsquery (text search query) using `websearch_to_tsquery('english', %s)`.
-3. Matches the query against the document vectors using the `@@` operator.
-4. Ranks the results using `ts_rank_cd` for relevance scoring.
-
-Here's a breakdown of the SQL query used:
+Run the following command to check the que:
 
 ```sql
-SELECT id, contents, ts_rank_cd(to_tsvector('english', contents), query) as rank
-FROM {self.vector_settings.table_name}, websearch_to_tsquery('english', %s) query
-WHERE to_tsvector('english', contents) @@ query
-ORDER BY rank DESC
-LIMIT %s
+SELECT * FROM ai.vectorizer_status;
 ```
 
-- `to_tsvector('english', contents)`: Converts the document content into a searchable vector of lexemes.
-- `websearch_to_tsquery('english', %s)`: Parses the user's query into a tsquery, supporting web search syntax.
-- `@@`: The match operator, returns true if the tsvector matches the tsquery.
-- `ts_rank_cd`: Calculates the relevance score based on the frequency and proximity of matching terms.
+## Automatic Embedding Updates
 
-### Advantages of Keyword Search
+The vectorizer worker runs every 5 minutes to keep embeddings in sync with your source data. To manually trigger an update, stop the container and run:
 
-Keyword search is particularly useful for finding exact matches and specific terms that semantic models might miss. It excels at:
-
-1. Locating precise phrases or technical terms.
-2. Finding rare words or unique identifiers.
-3. Matching acronyms or abbreviations.
-
-While semantic search can understand context and meaning, keyword search ensures that specific, important terms are not overlooked, making it a valuable complement to semantic search in a hybrid approach.
-
-### GIN Index
-
-The GIN (Generalized Inverted Index) index is implemented in the VectorStore class to increase the performance of keyword searches within PostgreSQL. By creating an inverted index on the text content of documents, it enables rapid full-text search operations, allowing for efficient retrieval of relevant documents even in large datasets.
-
-```SQL
-CREATE INDEX IF NOT EXISTS index_name
-ON table_name USING gin(to_tsvector('english', contents));
+```bash
+docker compose up -d vectorizer-worker
 ```
 
-### What About BM25 Ranking?
+## Performing Similarity Search
 
-While PostgreSQL's built-in ranking functions are powerful, they don't directly implement the BM25 (Best Matching 25) algorithm, which is considered state-of-the-art for many information retrieval tasks. BM25 takes into account term frequency, inverse document frequency, and document length normalization (TF-IDF-DL).
+Try out semantic search using the provided script:
 
-Although PostgreSQL doesn't natively support BM25, it can be approximated using custom functions or extensions. For example, the `pg_search` extension can be used to implement BM25-like functionality. Alternatively, you can create a custom ranking function that mimics BM25 behavior using PostgreSQL's plpgsql language. In Anthropic's recent [guide](https://github.com/anthropics/anthropic-cookbook/blob/main/skills/contextual-embeddings/guide.ipynb), they implement BM25 with Elasticsearch in parallel to a vector database.
+```bash
+python app/search.py
+```
 
-If exact BM25 ranking is crucial for your application, you might consider using specialized search engines like Elasticsearch or implementing a custom solution on top of PostgreSQL with Paradedb's [pg_search](https://github.com/paradedb/paradedb).
+This will perform a similarity search using OpenAI's embeddings and return relevant article chunks based on your query.
 
-## Hybrid Search
+## How It Works
 
-Hybrid search combines the strengths of both keyword-based and semantic (vector) search to provide more comprehensive and accurate results. The `hybrid_search` method in `vector_store.py` implements this approach.
+1. The `ai.create_vectorizer()` function sets up automatic embedding generation for your table
+2. When you insert/update data in the `news` table, the vectorizer worker detects changes
+3. The worker automatically generates embeddings using OpenAI's API
+4. Embeddings are stored in a separate table that's automatically kept in sync
+5. You can perform similarity searches using the `<=>` operator with the stored embeddings
 
-### How it works
+This approach eliminates the need to manage embeddings in your application code, making it easier to build semantic search features into your PostgreSQL applications.
 
-1. Perform keyword search using `keyword_search` method.
-2. Perform semantic search using `semantic_search` method.
-3. Combine the results from both searches.
-4. Remove duplicates, prioritizing the first occurrence (which maintains the original order and search type).
-5. Optionally rerank the combined results using Cohere's reranking model.
+## Next Steps
 
-This approach allows us to capture both lexical matches (from keyword search) and semantic similarities (from vector search), providing a more robust search experience.
+- Explore different chunking strategies in the vectorizer configuration
+- Try different embedding models
+- Implement hybrid search combining traditional and vector search
 
-## Reranking
+For more details on available options and advanced features, see the [Vectorizer API reference](https://github.com/timescale/pgai/blob/main/docs/vectorizer.md). 
 
-Reranking improves search relevance by reordering the result set from a retriever using a different model. It computes a relevance score between the query and each data object, sorting them from most to least relevant. This two-stage process ensures efficiency by retrieving relevant objects before reranking them. In our implementation, we use [Cohere's reranking model](https://cohere.com/blog/rerank) to achieve this. This is an important step when you combine semantic search results with keyword search results.
+## More SQL Examples
 
-### Cohere's Reranking Implementation
+Here are some additional SQL commands to help you manage your vectorizers:
 
-Cohere's reranking model is a system designed to reorder a list of documents based on their relevance to a given query. Here's how we use it in our `_rerank_results` method:
+### Creating Additional Vectorizers
 
-1. We send the original query and the combined results from keyword and semantic search to Cohere's rerank API.
-2. The API returns a reordered list of documents along with relevance scores that are computed with a large languge model.
-3. We create a new DataFrame with the reranked results, including the original search type (keyword or semantic) and the new relevance scores.
-4. The results are sorted by the relevance score in descending order.
+Create a vectorizer using OpenAI's larger embedding model:
 
-This process allows us to leverage Cohere's advanced language understanding capabilities to further refine our search results, potentially surfacing the most relevant documents that might have been ranked lower in the initial search.
+```sql
+-- Create a vectorizer with text-embedding-3-large
+SELECT ai.create_vectorizer(
+    'public.news'::regclass, 
+    destination => 'news_embedding_oai_large',
+    embedding => ai.embedding_openai('text-embedding-3-large', 3072, api_key_name=>'OPENAI_API_KEY'),
+    chunking => ai.chunking_recursive_character_text_splitter('article'),
+    formatting => ai.formatting_python_template('Article summary: $summary article chunk: $chunk')
+);
+```
 
-By combining keyword search, semantic search, and reranking, we create a powerful and flexible search system that can handle a wide range of queries and document types effectively.
+### Monitoring Vectorizers
 
-## Further Reading
+Check the status and configuration of your vectorizers:
 
-- https://www.anthropic.com/news/contextual-retrieval
-- https://www.timescale.com/blog/postgresql-hybrid-search-using-pgvector-and-cohere/
-- https://jkatz05.com/post/postgres/hybrid-search-postgres-pgvector/
-- https://www.timescale.com/blog/build-search-and-rag-systems-on-postgresql-using-cohere-and-pgai/
+```sql
+-- List all configured vectorizers
+SELECT * FROM ai.vectorizer;
+
+-- Check processing status and queue
+SELECT * FROM ai.vectorizer_status;
+```
+
+### Cleanup Operations
+
+Remove a vectorizer and its associated objects:
+
+```sql
+DO $$
+DECLARE
+    target_name TEXT := 'blogs_embedding';
+BEGIN
+    -- Delete the vectorizer entry
+    DELETE FROM ai.vectorizer
+    WHERE target_schema = 'public' 
+    AND target_table = target_name || '_store';
+    
+    -- Drop the view if it exists
+    EXECUTE format('DROP VIEW IF EXISTS public.%I', target_name);
+
+    -- Drop the table if it exists
+    EXECUTE format('DROP TABLE IF EXISTS public.%I', target_name || '_store');
+END $$;
+```
+
+These commands help you manage the full lifecycle of your vectorizers, from creation to monitoring and cleanup.

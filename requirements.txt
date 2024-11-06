@@ -1,8 +1,7 @@
 pandas
 openai
-psycopg
+psycopg-binary
 python-dotenv
-timescale-vector
 instructor
-anthropic
-cohere
+pydantic
+pydantic-settings

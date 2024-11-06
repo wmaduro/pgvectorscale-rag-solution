@@ -5,7 +5,8 @@ from functools import lru_cache
 from typing import Optional
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field
+from pydantic import Field
+from pydantic_settings import BaseSettings
 
 load_dotenv(dotenv_path="./.env")
 
@@ -17,7 +18,7 @@ def setup_logging():
     )
 
 
-class LLMSettings(BaseModel):
+class LLMSettings(BaseSettings):
     """Base settings for Language Model configurations."""
 
     temperature: float = 0.0
@@ -33,31 +34,24 @@ class OpenAISettings(LLMSettings):
     embedding_model: str = Field(default="text-embedding-3-small")
 
 
-class CohereSettings(BaseModel):
-    """Cohere-specific settings."""
-
-    api_key: str = Field(default_factory=lambda: os.getenv("COHERE_API_KEY"))
-
-
-class DatabaseSettings(BaseModel):
+class DatabaseSettings(BaseSettings):
     """Database connection settings."""
 
     service_url: str = Field(default_factory=lambda: os.getenv("TIMESCALE_SERVICE_URL"))
 
 
-class VectorStoreSettings(BaseModel):
+class VectorStoreSettings(BaseSettings):
     """Settings for the VectorStore."""
 
-    table_name: str = "documents"
+    table_name: str = "news"
     embedding_dimensions: int = 1536
     time_partition_interval: timedelta = timedelta(days=7)
 
 
-class Settings(BaseModel):
+class Settings(BaseSettings):
     """Main settings class combining all sub-settings."""
 
     openai: OpenAISettings = Field(default_factory=OpenAISettings)
-    cohere: CohereSettings = Field(default_factory=CohereSettings)
     database: DatabaseSettings = Field(default_factory=DatabaseSettings)
     vector_store: VectorStoreSettings = Field(default_factory=VectorStoreSettings)
 

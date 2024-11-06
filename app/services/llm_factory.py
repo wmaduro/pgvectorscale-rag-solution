@@ -21,10 +21,6 @@ class LLMFactory:
             "anthropic": lambda s: instructor.from_anthropic(
                 Anthropic(api_key=s.api_key)
             ),
-            "llama": lambda s: instructor.from_openai(
-                OpenAI(base_url=s.base_url, api_key=s.api_key),
-                mode=instructor.Mode.JSON,
-            ),
         }
 
         initializer = client_initializers.get(self.provider)
