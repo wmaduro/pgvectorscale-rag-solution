@@ -4,10 +4,10 @@ This guide demonstrates how to use Timescale's new vectorizer feature to automat
 
 ## Further documenation
 
-- [Vector Databases Are the Wrong Abstraction](https://www.timescale.com/blog/vector-databases-are-the-wrong-abstraction/)
-- [Vectorizer Quick Start](https://github.com/timescale/pgai/blob/main/docs/vectorizer-quick-start.md)
-- [Automate AI embedding with pgai Vectorizer](https://github.com/timescale/pgai/blob/main/docs/vectorizer.md)
-- [Vectorizer Worker](https://github.com/timescale/pgai/blob/main/docs/vectorizer-worker.md)
+- [Article: Vector Databases Are the Wrong Abstraction](https://www.timescale.com/blog/vector-databases-are-the-wrong-abstraction/)
+- [Docs: Vectorizer Quick Start](https://github.com/timescale/pgai/blob/main/docs/vectorizer-quick-start.md)
+- [Docs: Automate AI embedding with pgai Vectorizer](https://github.com/timescale/pgai/blob/main/docs/vectorizer.md)
+- [Docs: Vectorizer Worker](https://github.com/timescale/pgai/blob/main/docs/vectorizer-worker.md)
   
 ## Prerequisites
 
