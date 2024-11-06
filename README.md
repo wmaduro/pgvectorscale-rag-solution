@@ -25,13 +25,13 @@ cp app/example.env app/.env
 cp docker/example.env app/.env
 ```
 
-1. Add your OpenAI API key to the `.env` file:
+2. Add your OpenAI API key to the `.env` file:
    
 ```
 OPENAI_API_KEY=your_key_here
 ```
 
-1. Start the Docker containers:
+3. Start the Docker containers:
    
 ```bash
 docker compose up -d
@@ -53,7 +53,7 @@ CREATE EXTENSION IF NOT EXISTS ai CASCADE;
 CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;
 ```
 
-1. Base table creation (`02-init.sql`):
+2. Base table creation (`02-init.sql`):
 
 ```sql
 CREATE TABLE news (
@@ -64,7 +64,7 @@ CREATE TABLE news (
 );
 ```
 
-1. Vectorizer configuration (`03-init.sql`):
+3. Vectorizer configuration (`03-init.sql`):
 
 ```sql
 SELECT ai.create_vectorizer(
