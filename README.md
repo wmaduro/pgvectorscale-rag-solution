@@ -84,7 +84,7 @@ SELECT ai.create_vectorizer(
 pip install -r requirements.txt
 ```
 
-1. Run the sample data loader:
+2. Run the sample data loader:
 
 ```bash
 python app/upsert.py
